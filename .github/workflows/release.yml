@@ -60,16 +60,28 @@ jobs:
           dmg_path=$(./Scripts/build-dmg.sh "$RELEASE_TAG")
           echo "path=$dmg_path" >> "$GITHUB_OUTPUT"
 
+      - name: Create SHA-256 checksum
+        id: checksum
+        env:
+          DMG_PATH: ${{ steps.dmg.outputs.path }}
+        run: |
+          checksum_path="$(dirname "$DMG_PATH")/SHA256SUMS.txt"
+          cd "$(dirname "$DMG_PATH")"
+          shasum -a 256 "$(basename "$DMG_PATH")" > "$checksum_path"
+          shasum -a 256 -c "$checksum_path"
+          echo "path=$checksum_path" >> "$GITHUB_OUTPUT"
+
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           DMG_PATH: ${{ steps.dmg.outputs.path }}
+          CHECKSUM_PATH: ${{ steps.checksum.outputs.path }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$DMG_PATH" --clobber
+            gh release upload "$RELEASE_TAG" "$DMG_PATH" "$CHECKSUM_PATH" --clobber
           else
-            gh release create "$RELEASE_TAG" "$DMG_PATH" \
+            gh release create "$RELEASE_TAG" "$DMG_PATH" "$CHECKSUM_PATH" \
               --verify-tag \
               --generate-notes \
               --title "OPPO Pods for macOS $RELEASE_TAG"

@@ -66,7 +66,7 @@
 
 ## 发布版本
 
-推送符合 `v*` 的语义化版本标签后，GitHub Actions 会自动测试、构建 DMG、创建或更新对应的 GitHub Release，并只上传 DMG 安装镜像：
+推送符合 `v*` 的语义化版本标签后，GitHub Actions 会自动测试、构建 DMG、创建或更新对应的 GitHub Release，并上传 DMG 安装镜像及其 `SHA256SUMS.txt` 校验文件：
 
 ```bash
 git tag v0.1.0
