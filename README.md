@@ -64,6 +64,17 @@
 
 当前构建脚本只生成 ad-hoc 签名版本，没有 Apple 公证。从 GitHub 下载后首次打开时，可能需要在 Finder 中右键 App 并选择“打开”。
 
+## 发布版本
+
+推送符合 `v*` 的语义化版本标签后，GitHub Actions 会自动测试、构建 DMG、创建或更新对应的 GitHub Release，并只上传 DMG 安装镜像：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+DMG 内包含 `OPPOPods.app` 和“应用程序”文件夹快捷方式。当前自动发布仍使用 ad-hoc 签名；配置 Developer ID 证书和 Apple 公证凭据后，才适合面向普通用户无提示分发。
+
 ## 从源码构建
 
 ```bash
@@ -82,6 +93,8 @@ open dist/OPPOPods.app
 2. 生成标准 `dist/OPPOPods.app` 目录结构。
 3. 复制 `Info.plist`、应用图标、型号库和 EQ 名称表。
 4. 使用蓝牙 entitlements 执行本地 ad-hoc 签名。
+
+运行 `./Scripts/build-dmg.sh development` 可以在 `dist/` 中生成本地 DMG。
 
 公开分发前应改用 Developer ID Application 签名，并完成 Apple 公证和 DMG 打包。
 

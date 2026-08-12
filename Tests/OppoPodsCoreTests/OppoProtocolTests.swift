@@ -24,7 +24,7 @@ final class OppoProtocolTests: XCTestCase {
         let frame = OppoFrame(
             command: OppoCommand.batteryResponse,
             sequence: 1,
-            payload: Data([1, 86, 2, 0x80 | 74, 3, 55])
+            payload: Data([1, 86, 2, UInt8(0x80 | 74), 3, 55])
         )
         let battery = try XCTUnwrap(OppoParsers.battery(from: frame))
         XCTAssertEqual(battery.left, BatteryLevel(level: 86, isCharging: false))

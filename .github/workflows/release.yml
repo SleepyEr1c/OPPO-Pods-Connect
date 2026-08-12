@@ -1,0 +1,75 @@
+name: Release DMG
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v* tag to publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSHED_TAG: ${{ github.ref_name }}
+          MANUAL_TAG: ${{ inputs.tag }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$MANUAL_TAG"
+          else
+            tag="$PUSHED_TAG"
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $tag" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Test protocol core
+        run: swift test
+
+      - name: Build app bundle
+        run: ./Scripts/build-app.sh
+
+      - name: Verify app signature
+        run: codesign --verify --deep --strict dist/OPPOPods.app
+
+      - name: Build DMG
+        id: dmg
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          dmg_path=$(./Scripts/build-dmg.sh "$RELEASE_TAG")
+          echo "path=$dmg_path" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          DMG_PATH: ${{ steps.dmg.outputs.path }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$DMG_PATH" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$DMG_PATH" \
+              --verify-tag \
+              --generate-notes \
+              --title "OPPO Pods for macOS $RELEASE_TAG"
