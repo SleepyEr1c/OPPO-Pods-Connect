@@ -85,3 +85,4 @@ jobs:
               --verify-tag \
               --generate-notes \
               --title "OPPO Pods for macOS $RELEASE_TAG"
+          fi
