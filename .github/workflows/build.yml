@@ -1,0 +1,47 @@
+name: Build and Test
+
+on:
+  push:
+    branches: ["main", "master", "dev"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main", "master", "dev"]
+  workflow_dispatch:
+
+jobs:
+  macos:
+    runs-on: macos-15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build debug target
+        run: swift build
+
+      - name: Test protocol core
+        run: swift test
+
+      - name: Build app bundle
+        run: ./Scripts/build-app.sh
+
+      - name: Verify signature and bundled resources
+        run: |
+          codesign --verify --deep --strict dist/OPPOPods.app
+          test -f dist/OPPOPods.app/Contents/Resources/AppIcon.icns
+          test -f dist/OPPOPods.app/Contents/Resources/device_models.json
+          test -f dist/OPPOPods.app/Contents/Resources/eq_mode_names.json
+
+      - name: Archive unsigned-development app
+        run: ditto -c -k --keepParent dist/OPPOPods.app OPPOPods-macOS-development.zip
+
+      - name: Upload development artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OPPOPods-macOS-development
+          path: OPPOPods-macOS-development.zip
+          if-no-files-found: error

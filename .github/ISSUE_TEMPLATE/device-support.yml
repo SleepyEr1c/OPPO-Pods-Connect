@@ -1,0 +1,68 @@
+name: 设备适配报告
+description: 提交 OPPO / OnePlus / realme 耳机的实机兼容性结果
+title: "[Device] "
+labels: ["device-support"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢提供实机结果。请勿上传蓝牙 MAC 地址、序列号、账号信息或未脱敏抓包。
+  - type: input
+    id: model
+    attributes:
+      label: 完整型号
+      placeholder: OPPO Enco Free4（丹拿版）
+    validations:
+      required: true
+  - type: input
+    id: product_id
+    attributes:
+      label: Product ID
+      description: 可在 OPPOPods 已连接状态或设置页中查看。
+      placeholder: 06C010
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: 耳机固件版本
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: 系统版本与设备
+      placeholder: macOS 15.x / Apple Silicon
+    validations:
+      required: true
+  - type: checkboxes
+    id: results
+    attributes:
+      label: 已确认可用功能
+      options:
+        - label: 控制通道连接
+        - label: 左右耳 / 充电盒电量
+        - label: ANC / 关闭 / 通透
+        - label: 自适应降噪或降噪档位
+        - label: 空间音效
+        - label: 游戏低延迟
+        - label: EQ
+        - label: 佩戴检测
+        - label: 双设备连接
+  - type: textarea
+    id: failures
+    attributes:
+      label: 不可用功能与复现步骤
+      description: 请说明预期结果、实际结果以及是否需要断开重连。
+  - type: textarea
+    id: logs
+    attributes:
+      label: 脱敏日志（可选）
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已删除蓝牙地址、序列号、账号信息和其他隐私数据。
+          required: true

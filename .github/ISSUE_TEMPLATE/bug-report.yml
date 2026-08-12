@@ -1,0 +1,44 @@
+name: Bug 报告
+description: 报告可复现的软件问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: OPPOPods 版本或 commit
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 系统、设备与耳机型号
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 脱敏日志或截图（可选）
+      description: 请删除蓝牙地址、序列号、账号和其他隐私信息。
