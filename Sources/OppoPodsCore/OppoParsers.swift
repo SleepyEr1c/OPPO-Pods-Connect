@@ -125,4 +125,49 @@ public enum OppoParsers {
         guard frame.command == OppoCommand.eqResponse, bytes.count >= 2, bytes[0] == 0 else { return nil }
         return Int(bytes[1])
     }
+
+    public static func allEqualizers(from frame: OppoFrame) -> [DeviceEqualizerPreset]? {
+        guard frame.command == OppoCommand.allEQResponse else { return nil }
+        let bytes = Array(frame.payload)
+        guard bytes.count >= 2, bytes[0] == 0 else { return nil }
+
+        let expectedCount = Int(bytes[1])
+        var position = 2
+        var presets: [DeviceEqualizerPreset] = []
+        while presets.count < expectedCount {
+            guard position + 5 <= bytes.count else { return nil }
+            let selected = bytes[position] != 0
+            let minimumGain = Int(Int8(bitPattern: bytes[position + 1]))
+            let maximumGain = Int(Int8(bitPattern: bytes[position + 2]))
+            let presetID = Int(bytes[position + 3])
+            let nameLength = Int(bytes[position + 4])
+            position += 5
+            guard position + nameLength <= bytes.count else { return nil }
+            let name = String(decoding: bytes[position..<(position + nameLength)], as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            position += nameLength
+
+            guard position < bytes.count else { return nil }
+            let frequencyCount = Int(bytes[position])
+            position += 1
+            guard position + frequencyCount * 3 <= bytes.count else { return nil }
+            var frequencies: [Int] = []
+            var gains: [Int] = []
+            for _ in 0..<frequencyCount {
+                frequencies.append(Int(bytes[position]) | (Int(bytes[position + 1]) << 8))
+                gains.append(Int(Int8(bitPattern: bytes[position + 2])))
+                position += 3
+            }
+            presets.append(DeviceEqualizerPreset(
+                id: presetID,
+                name: name,
+                isSelected: selected,
+                minimumGain: minimumGain,
+                maximumGain: maximumGain,
+                frequencies: frequencies,
+                gains: gains
+            ))
+        }
+        return presets
+    }
 }

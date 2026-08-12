@@ -12,6 +12,7 @@ public struct OppoCommands: Sendable {
     public func queryBattery() -> Data { builder.make(OppoCommand.queryBattery, fixedSequence: 0xF0) }
     public func queryANC() -> Data { builder.make(OppoCommand.queryANC, payload: [0x01, 0x01]) }
     public func queryEQ() -> Data { builder.make(OppoCommand.queryEQ) }
+    public func queryAllEQ() -> Data { builder.make(OppoCommand.queryAllEQ, payload: [0x01, 0x05]) }
     public func queryBroadcastCodes() -> Data { builder.make(OppoCommand.queryBroadcastCodes) }
 
     public func queryStatus() -> Data {
@@ -56,5 +57,82 @@ public struct OppoCommands: Sendable {
 
     public func setEQ(_ presetID: Int) -> Data {
         builder.make(OppoCommand.setEQ, payload: [UInt8(clamping: presetID)])
+    }
+
+    public func saveCustomEQ(
+        id: Int,
+        name: String,
+        frequencies: [Int],
+        gains: [Int],
+        minimumGain: Int = -6,
+        maximumGain: Int = 6
+    ) -> Data {
+        builder.make(
+            OppoCommand.setEQDetail,
+            payload: equalizerDetailPayload(
+                action: id > 0 ? 2 : 1,
+                id: id,
+                name: name,
+                frequencies: frequencies,
+                gains: gains,
+                minimumGain: minimumGain,
+                maximumGain: maximumGain
+            )
+        )
+    }
+
+    public func deleteCustomEQ(_ preset: DeviceEqualizerPreset) -> Data {
+        builder.make(
+            OppoCommand.setEQDetail,
+            payload: equalizerDetailPayload(
+                action: 3,
+                id: preset.id,
+                name: preset.name,
+                frequencies: preset.frequencies,
+                gains: preset.gains,
+                minimumGain: preset.minimumGain,
+                maximumGain: preset.maximumGain
+            )
+        )
+    }
+
+    private func equalizerDetailPayload(
+        action: Int,
+        id: Int,
+        name: String,
+        frequencies: [Int],
+        gains: [Int],
+        minimumGain: Int,
+        maximumGain: Int
+    ) -> [UInt8] {
+        let defaultFrequencies = [62, 250, 1_000, 4_000, 8_000, 16_000]
+        let safeFrequencies = Array((frequencies.isEmpty ? defaultFrequencies : frequencies).prefix(32))
+        let lower = min(minimumGain, maximumGain).clamped(to: -128...127)
+        let upper = max(minimumGain, maximumGain).clamped(to: lower...127)
+        let maximumNameLength = max(0, 248 - 6 - safeFrequencies.count * 3)
+        let nameBytes = Array(name.utf8.prefix(min(255, maximumNameLength)))
+        var payload: [UInt8] = [
+            UInt8(clamping: action.clamped(to: 1...3)),
+            UInt8(bitPattern: Int8(lower)),
+            UInt8(bitPattern: Int8(upper)),
+            UInt8(clamping: id),
+            UInt8(nameBytes.count)
+        ]
+        payload.append(contentsOf: nameBytes)
+        payload.append(UInt8(safeFrequencies.count))
+        for (index, frequency) in safeFrequencies.enumerated() {
+            let safeFrequency = frequency.clamped(to: 0...0xFFFF)
+            payload.append(UInt8(truncatingIfNeeded: safeFrequency))
+            payload.append(UInt8(truncatingIfNeeded: safeFrequency >> 8))
+            let gain = (gains.indices.contains(index) ? gains[index] : 0).clamped(to: lower...upper)
+            payload.append(UInt8(bitPattern: Int8(gain)))
+        }
+        return payload
+    }
+}
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }

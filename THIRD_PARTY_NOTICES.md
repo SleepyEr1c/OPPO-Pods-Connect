@@ -1,6 +1,6 @@
 # Third-party notices / 第三方声明
 
-本文说明独立 macOS 仓库 OPPOPods 使用、修改或参考的外部来源。它帮助贡献者和二进制分发者保留必要归属，不替代各项目自己的许可证正文。
+本文说明独立 macOS 仓库 OPPO Pods for macOS 使用、修改或参考的外部来源。它帮助贡献者和二进制分发者保留必要归属，不替代各项目自己的许可证正文。
 
 ## 项目沿革
 
@@ -30,7 +30,7 @@
 | 来源 | 使用方式 | 性质 |
 |---|---|---|
 | OPPO / HeyTap **HeyMelody** 官方客户端 | 观察蓝牙通信，分析 SPP UUID、命令编号、product ID、型号能力字段和通知流程 | 官方闭源软件；不是开源依赖，本仓库不分发 APK |
-| 原 OPPOPods 仓库的协议文档与实现 | RFCOMM 外层帧、握手、电量、ANC、状态、空间音效、EQ 与 feature 命令的直接迁移来源 | GPL-3.0 项目内容 |
+| 原 OPPOPods 仓库的协议文档与实现 | RFCOMM 外层帧、握手、电量、ANC、状态、空间音效、内置及自定义 EQ 与 feature 命令的直接迁移来源 | GPL-3.0 项目内容 |
 | 本项目贡献者的蓝牙日志和实机测试 | 验证型号差异、命令响应与连接时序 | 只保留脱敏结论；不得提交蓝牙地址或用户私有抓包 |
 | [AasheeshLikePanner/cracked-oneplus-buds](https://github.com/AasheeshLikePanner/cracked-oneplus-buds) 及其 [OPOv1 研究说明](https://aasheesh.vercel.app/blog/oneplus-buds) | 相邻的 OnePlus / OPPO / realme 协议研究，用于交叉验证社区结论 | 协议参考；当前 Swift RFCOMM 传输和封包代码来自本项目代码线 |
 

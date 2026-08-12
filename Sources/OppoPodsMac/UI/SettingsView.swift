@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var session: EarbudsSession
     @EnvironmentObject private var devices: BluetoothDeviceRepository
+    @State private var showingCustomEqualizer = false
 
     var body: some View {
         TabView {
@@ -71,7 +72,7 @@ struct SettingsView: View {
             VStack(spacing: 10) {
                 Image(systemName: "earbuds")
                     .font(.system(size: 38))
-                Text("OPPOPods for macOS")
+                Text("OPPO Pods for macOS")
                     .font(.title3.weight(.semibold))
                 Text("通过 OPPO / HeyMelody RFCOMM 协议控制耳机。")
                     .foregroundStyle(.secondary)
@@ -85,6 +86,9 @@ struct SettingsView: View {
             .tabItem { Label("关于", systemImage: "info.circle") }
         }
         .frame(width: 700, height: 470)
+        .sheet(isPresented: $showingCustomEqualizer) {
+            CustomEqualizerEditorView(session: session)
+        }
     }
 
     private var controlsPage: some View {
@@ -130,19 +134,47 @@ struct SettingsView: View {
                 if !session.equalizerPresets.isEmpty || session.capabilities.hasCustomEQ {
                     SettingsControlCard(title: "声音效果", symbol: "speaker.wave.2") {
                         if !session.equalizerPresets.isEmpty {
-                            Picker("均衡器", selection: Binding(
-                                get: { session.selectedEQ },
-                                set: { session.setEQ($0) }
-                            )) {
-                                ForEach(session.equalizerPresets) { preset in
-                                    Text(preset.name).tag(preset.id)
+                            HStack {
+                                Text("均衡器")
+                                Spacer()
+                                Picker("均衡器", selection: Binding(
+                                    get: { session.selectedEQ },
+                                    set: { session.setEQ($0) }
+                                )) {
+                                    ForEach(session.equalizerPresets) { preset in
+                                        Text(preset.name).tag(preset.id)
+                                    }
                                 }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                                .frame(width: 180)
                             }
                         }
                         if session.capabilities.hasCustomEQ {
-                            Text("支持自定义均衡器")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Divider()
+                            Button {
+                                session.refreshCustomEQ()
+                                showingCustomEqualizer = true
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "slider.horizontal.3")
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 18)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("自定义均衡器")
+                                            .foregroundStyle(.primary)
+                                        Text("编辑频段与增益")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }

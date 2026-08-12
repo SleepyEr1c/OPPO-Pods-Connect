@@ -1,4 +1,4 @@
-# OPPOPods for macOS
+# OPPO Pods for macOS
 
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-111111.svg)](#系统要求)
 [![Swift](https://img.shields.io/badge/Swift-5.10-F05138.svg)](Package.swift)
@@ -8,6 +8,16 @@
 
 > [!WARNING]
 > 本项目与 OPPO、OnePlus、realme、HeyTap 或 Apple 无关，也不是官方 HeyMelody 客户端。协议可能随耳机固件更新而变化，请先阅读[设备适配说明](docs/Supported_Devices.md)。
+
+## 界面预览
+
+| 菜单栏状态 | 降噪主页面 |
+|:---:|:---:|
+| ![菜单栏中的耳机电量](docs/images/menu-bar-status.png) | ![电量与噪声控制主页面](docs/images/noise-control.png) |
+
+![采用双列卡片布局的耳机功能设置页面](docs/images/earbud-controls.png)
+
+界面会根据耳机返回的 product ID 和型号能力自动隐藏不支持的控制项；截图为 OPPO Enco Free4（丹拿版）的实机效果。
 
 ## 当前状态
 
@@ -29,8 +39,12 @@
 - 降噪、关闭、通透、自适应降噪
 - 游戏低延迟开关
 - 空间音效开关，或型号明确支持时显示空间音频三档模式
-- EQ 预设、佩戴检测、双设备连接
+- 内置 EQ 预设，以及设备端自定义 EQ 的读取、选择、六段或型号指定频段编辑
+- 佩戴检测、双设备连接
 - 根据 product ID 和型号元数据动态隐藏不适用功能
+
+> [!NOTE]
+> 自定义 EQ 使用原项目整理的 `0x0122`/`0x0418` 协议读取和写入耳机。OPPO Enco Free4（丹拿版）未在型号表声明频点时使用 62、250、1000、4000、8000、16000 Hz 六段默认值；其他型号若声明了频点则按型号数据显示。该功能仍需更多固件版本实机验证，首次使用前建议在官方 HeyMelody 软件中记录原曲线。
 
 ## 系统要求
 
@@ -174,4 +188,4 @@ OPPO、OnePlus、realme、HeyTap、HeyMelody、Apple 和 macOS 是各自权利�
 
 ## English summary
 
-OPPOPods is an unofficial GPL-3.0 macOS menu-bar controller for selected OPPO, OnePlus, and realme earbuds. It uses SwiftUI, IOBluetooth, and a reverse-engineered HeyMelody RFCOMM protocol. Read the [device matrix](docs/Supported_Devices.md) and [third-party notices](THIRD_PARTY_NOTICES.md) before testing or redistributing it.
+OPPO Pods for macOS is an unofficial GPL-3.0 menu-bar controller for selected OPPO, OnePlus, and realme earbuds. It uses SwiftUI, IOBluetooth, and a reverse-engineered HeyMelody RFCOMM protocol. Read the [device matrix](docs/Supported_Devices.md) and [third-party notices](THIRD_PARTY_NOTICES.md) before testing or redistributing it.

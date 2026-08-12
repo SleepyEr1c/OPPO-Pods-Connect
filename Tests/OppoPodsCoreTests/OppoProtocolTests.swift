@@ -52,4 +52,45 @@ final class OppoProtocolTests: XCTestCase {
         let data = OppoCommands().setNoiseControl(protocolIndex: 11)
         XCTAssertEqual(data, Data([0xAA, 0x0B, 0, 0, 0x04, 0x04, 0xF0, 4, 0, 1, 1, 0, 0x08]))
     }
+
+    func testQueryAllEqualizersPacket() throws {
+        let frame = try XCTUnwrap(OppoFrame(data: OppoCommands().queryAllEQ()))
+        XCTAssertEqual(frame.command, OppoCommand.queryAllEQ)
+        XCTAssertEqual(frame.payload, Data([0x01, 0x05]))
+    }
+
+    func testCustomEqualizerParser() throws {
+        let name = Array("自定义".utf8)
+        let payload = Data(
+            [0, 1, 1, 0xFA, 0x06, 7, UInt8(name.count)]
+                + name
+                + [2, 62, 0, 3, 0xE8, 3, 0xFE]
+        )
+        let frame = OppoFrame(command: OppoCommand.allEQResponse, sequence: 1, payload: payload)
+        let presets = try XCTUnwrap(OppoParsers.allEqualizers(from: frame))
+        XCTAssertEqual(presets, [DeviceEqualizerPreset(
+            id: 7,
+            name: "自定义",
+            isSelected: true,
+            minimumGain: -6,
+            maximumGain: 6,
+            frequencies: [62, 1_000],
+            gains: [3, -2]
+        )])
+    }
+
+    func testSaveCustomEqualizerPacket() throws {
+        let data = OppoCommands().saveCustomEQ(
+            id: 7,
+            name: "EQ",
+            frequencies: [62, 1_000],
+            gains: [3, -2]
+        )
+        let frame = try XCTUnwrap(OppoFrame(data: data))
+        XCTAssertEqual(frame.command, OppoCommand.setEQDetail)
+        XCTAssertEqual(
+            frame.payload,
+            Data([2, 0xFA, 0x06, 7, 2, 0x45, 0x51, 2, 62, 0, 3, 0xE8, 3, 0xFE])
+        )
+    }
 }

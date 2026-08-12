@@ -75,3 +75,31 @@ public struct EqualizerPreset: Identifiable, Hashable, Sendable {
         self.name = name
     }
 }
+
+public struct DeviceEqualizerPreset: Identifiable, Hashable, Sendable {
+    public let id: Int
+    public let name: String
+    public let isSelected: Bool
+    public let minimumGain: Int
+    public let maximumGain: Int
+    public let frequencies: [Int]
+    public let gains: [Int]
+
+    public init(
+        id: Int,
+        name: String,
+        isSelected: Bool = false,
+        minimumGain: Int = -6,
+        maximumGain: Int = 6,
+        frequencies: [Int] = [],
+        gains: [Int] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.isSelected = isSelected
+        self.minimumGain = minimumGain
+        self.maximumGain = maximumGain
+        self.frequencies = frequencies
+        self.gains = gains
+    }
+}

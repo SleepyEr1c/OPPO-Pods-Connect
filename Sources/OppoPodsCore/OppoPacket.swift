@@ -14,6 +14,7 @@ public enum OppoCommand {
     public static let setFeature = 0x0403
     public static let setANC = 0x0404
     public static let setEQ = 0x0406
+    public static let setEQDetail = 0x0418
     public static let setSpatialAudio = 0x0422
     public static let spatialAudioNotify = 0x0510
 
@@ -23,6 +24,7 @@ public enum OppoCommand {
     public static let ancResponse = 0x810C
     public static let eqResponse = 0x810F
     public static let allEQResponse = 0x8122
+    public static let setEQDetailResponse = 0x8418
     public static let broadcastCodesResponse = 0x8200
 }
 

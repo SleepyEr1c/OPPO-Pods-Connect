@@ -15,6 +15,8 @@ struct DeviceCapabilities: Equatable {
     let hasDualDevice: Bool
     let equalizerPresets: [EqualizerPreset]
     let hasCustomEQ: Bool
+    let customEQFrequencies: [Int]
+    let customEQMaximumPresets: Int
 
     static let generic = DeviceCapabilities(
         modelID: "",
@@ -29,7 +31,9 @@ struct DeviceCapabilities: Equatable {
         hasWearDetection: false,
         hasDualDevice: false,
         equalizerPresets: [],
-        hasCustomEQ: false
+        hasCustomEQ: false,
+        customEQFrequencies: [],
+        customEQMaximumPresets: 0
     )
 }
 
@@ -50,6 +54,8 @@ final class DeviceModelRegistry {
         let gameModeList: [GameModeItem]?
         let gameSoundList: [GameSoundItem]?
         let customEqualizer: Int?
+        let customEqFrequency: [Int]?
+        let customEqMax: Int?
         let equalizerMode: [EQMode]?
         let equalizerModeCompat: [EQMode]?
         let equalizerModeByVersion: [EQMode]?
@@ -137,7 +143,9 @@ final class DeviceModelRegistry {
             hasWearDetection: (functions?.wearDetection ?? 0) > 0,
             hasDualDevice: (functions?.multiDevicesConnect ?? 0) > 0,
             equalizerPresets: presetsByID.values.sorted { $0.id < $1.id },
-            hasCustomEQ: (functions?.customEqualizer ?? 0) > 0
+            hasCustomEQ: (functions?.customEqualizer ?? 0) > 0,
+            customEQFrequencies: (functions?.customEqFrequency ?? []).filter { $0 > 0 },
+            customEQMaximumPresets: max(0, functions?.customEqMax ?? 0)
         )
     }
 

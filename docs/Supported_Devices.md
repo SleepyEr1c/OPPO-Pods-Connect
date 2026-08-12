@@ -1,6 +1,6 @@
 # 设备适配列表
 
-本文记录 OPPOPods for macOS 内置型号库与客户端适配分级。数据源为 `Resources/device_models.json`，当前共 137 条。
+本文记录 OPPO Pods for macOS 内置型号库与客户端适配分级。数据源为 `Resources/device_models.json`，当前共 137 条。
 
 ## 如何理解“支持”
 

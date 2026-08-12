@@ -15,9 +15,26 @@ final class EarbudsSession: ObservableObject {
     @Published private(set) var dualDevice = false
     @Published private(set) var spatialSound = false
     @Published private(set) var selectedEQ = 0
+    @Published private(set) var deviceEQPresets: [DeviceEqualizerPreset] = []
     @Published private(set) var capabilities = DeviceCapabilities.generic
 
-    var equalizerPresets: [EqualizerPreset] { capabilities.equalizerPresets }
+    var customEQPresets: [DeviceEqualizerPreset] {
+        let builtInIDs = Set(capabilities.equalizerPresets.map(\.id))
+        return deviceEQPresets.filter { !builtInIDs.contains($0.id) && !$0.name.isEmpty }
+    }
+
+    var equalizerPresets: [EqualizerPreset] {
+        capabilities.equalizerPresets + customEQPresets.map { EqualizerPreset(id: $0.id, name: $0.name) }
+    }
+
+    var customEQFrequencies: [Int] {
+        if let actual = customEQPresets.first(where: { !$0.frequencies.isEmpty })?.frequencies {
+            return actual
+        }
+        return capabilities.customEQFrequencies.isEmpty
+            ? [62, 250, 1_000, 4_000, 8_000, 16_000]
+            : capabilities.customEQFrequencies
+    }
 
     private let transport = RFCOMMTransport()
     private let commands = OppoCommands()
@@ -26,6 +43,7 @@ final class EarbudsSession: ObservableObject {
     private var refreshTimer: Timer?
     private var initializationTasks: [Task<Void, Never>] = []
     private var connectionTimeoutTask: Task<Void, Never>?
+    private var equalizerRefreshTask: Task<Void, Never>?
     // 旧设备使用 0x06；回报 0x28 后切换到新设备主开关。
     private var gameModeFeatureID: UInt8 = 0x06
 
@@ -81,6 +99,7 @@ final class EarbudsSession: ObservableObject {
         send(commands.queryBattery())
         send(commands.queryANC())
         send(commands.queryEQ())
+        if capabilities.hasCustomEQ { send(commands.queryAllEQ()) }
     }
 
     func setNoiseControl(_ mode: NoiseControlMode) {
@@ -122,6 +141,39 @@ final class EarbudsSession: ObservableObject {
         send(commands.setEQ(presetID))
     }
 
+    func refreshCustomEQ() {
+        guard capabilities.hasCustomEQ else { return }
+        send(commands.queryEQ())
+        send(commands.queryAllEQ())
+    }
+
+    func saveCustomEQ(
+        id: Int,
+        name: String,
+        frequencies: [Int],
+        gains: [Int],
+        minimumGain: Int,
+        maximumGain: Int
+    ) {
+        guard capabilities.hasCustomEQ, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        send(commands.saveCustomEQ(
+            id: id,
+            name: name,
+            frequencies: frequencies,
+            gains: gains,
+            minimumGain: minimumGain,
+            maximumGain: maximumGain
+        ))
+        scheduleEqualizerRefresh()
+    }
+
+    func deleteCustomEQ(_ preset: DeviceEqualizerPreset) {
+        guard capabilities.hasCustomEQ, preset.id > 0 else { return }
+        send(commands.deleteCustomEQ(preset))
+        deviceEQPresets.removeAll { $0.id == preset.id }
+        scheduleEqualizerRefresh()
+    }
+
     private func beginSession() {
         send(commands.handshake())
         send(commands.queryProductID())
@@ -158,8 +210,10 @@ final class EarbudsSession: ObservableObject {
             if let id = OppoParsers.productID(from: frame) {
                 productID = id
                 if let matched = modelRegistry.capabilities(for: id) {
+                    if capabilities.modelID != matched.modelID { deviceEQPresets = [] }
                     capabilities = matched
                     deviceName = matched.modelName
+                    if matched.hasCustomEQ { send(commands.queryAllEQ()) }
                 }
             }
             if let mode = OppoParsers.noiseControl(
@@ -180,6 +234,10 @@ final class EarbudsSession: ObservableObject {
                 spatialSound = status.spatialSound ?? spatialSound
             }
             if let preset = OppoParsers.currentEQ(from: frame) { selectedEQ = preset }
+            if let presets = OppoParsers.allEqualizers(from: frame) {
+                deviceEQPresets = presets
+                if let selected = presets.first(where: \.isSelected) { selectedEQ = selected.id }
+            }
             if let codes = OppoParsers.broadcastCodes(from: frame) {
                 send(commands.subscribe(to: codes))
             }
@@ -214,12 +272,24 @@ final class EarbudsSession: ObservableObject {
         dualDevice = false
         spatialSound = false
         selectedEQ = 0
+        deviceEQPresets = []
         gameModeFeatureID = 0x06
         capabilities = .generic
+    }
+
+    private func scheduleEqualizerRefresh() {
+        equalizerRefreshTask?.cancel()
+        equalizerRefreshTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard !Task.isCancelled else { return }
+            self?.refreshCustomEQ()
+        }
     }
 
     private func cancelInitializationTasks() {
         initializationTasks.forEach { $0.cancel() }
         initializationTasks.removeAll()
+        equalizerRefreshTask?.cancel()
+        equalizerRefreshTask = nil
     }
 }
