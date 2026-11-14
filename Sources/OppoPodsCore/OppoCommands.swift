@@ -47,6 +47,39 @@ public struct OppoCommands: Sendable {
         return builder.make(OppoCommand.setANC, fixedSequence: 0xF0, payload: payload)
     }
 
+    /// 查询双联（多点连接）设备列表。响应 0x8112，主动事件为 0x0204 type 0x06。
+    public func queryMultiConnect() -> Data {
+        builder.make(OppoCommand.queryMultiConnect)
+    }
+
+    /// 操作双联中的手持设备。operationType：1=连接 2=断开 3=移除 4=设置优先级。
+    /// 1/2/3 的 payload 为 `[op, mac(6)]`；4 时 `raisePriority=true` 发 `[0x04, 0x00]`，
+    /// 否则 `[0x04, 0x01, mac(6)]`。MAC 为大端 6 字节。
+    public func operateMultiConnectHandheld(
+        operationType: UInt8,
+        address: Data? = nil,
+        raisePriority: Bool = false
+    ) -> Data {
+        var payload: [UInt8]
+        switch operationType {
+        case 1, 2, 3:
+            let mac = Array(address ?? Data())
+            guard mac.count == 6 else { return Data() }
+            payload = [operationType] + mac
+        case 4:
+            if raisePriority {
+                payload = [0x04, 0x00]
+            } else {
+                let mac = Array(address ?? Data())
+                guard mac.count == 6 else { return Data() }
+                payload = [0x04, 0x01] + mac
+            }
+        default:
+            return Data()
+        }
+        return builder.make(OppoCommand.operateMultiConnectHandheld, fixedSequence: 0xF0, payload: payload)
+    }
+
     public func setFeature(_ feature: UInt8, enabled: Bool) -> Data {
         builder.make(OppoCommand.setFeature, fixedSequence: 0xF0, payload: [feature, enabled ? 1 : 0])
     }

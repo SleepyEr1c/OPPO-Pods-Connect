@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import IOBluetooth
 
@@ -30,6 +31,7 @@ final class AppModel: NSObject, ObservableObject {
 
     private var connectNotification: IOBluetoothUserNotification?
     private var reconnectTasks: [Task<Void, Never>] = []
+    private var cancellables = Set<AnyCancellable>()
 
     private enum Keys {
         static let selectedDevice = "selectedDeviceAddress"
@@ -46,6 +48,19 @@ final class AppModel: NSObject, ObservableObject {
             selector: #selector(bluetoothDeviceConnected(_:device:))
         )
         devices.refresh()
+
+        // 控制通道连上时在刘海下弹出胶囊卡片；断开时收起。
+        session.$connectionState
+            .removeDuplicates()
+            .sink { [weak self] state in
+                guard let self else { return }
+                if state == .connected {
+                    NotchPopupController.shared.show(session: self.session)
+                } else {
+                    NotchPopupController.shared.hide()
+                }
+            }
+            .store(in: &cancellables)
 
         if selectedDeviceAddress.isEmpty,
            let suggested = devices.devices.first(where: { device in

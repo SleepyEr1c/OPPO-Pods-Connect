@@ -7,6 +7,8 @@ struct MenuBarContentView: View {
     @EnvironmentObject private var session: EarbudsSession
     @EnvironmentObject private var devices: BluetoothDeviceRepository
 
+    @State private var contentHeight: CGFloat = 0
+
     var body: some View {
         VStack(spacing: 12) {
             header
@@ -23,7 +25,20 @@ struct MenuBarContentView: View {
         }
         .padding(14)
         .frame(width: 390)
-        .onAppear(perform: model.refreshDevices)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: ContentHeightPreferenceKey.self, value: proxy.size.height)
+            }
+        )
+        .onPreferenceChange(ContentHeightPreferenceKey.self) { contentHeight = $0 }
+        // MenuBarExtra 的窗口在内容变矮时不会自动收缩，窗口材质与内容错位后
+        // 会出现直角和边框线。这里把内容高度同步给窗口，强制窗口跟随内容。
+        .background(WindowSizeSync(width: 390, height: contentHeight))
+        .onAppear {
+            model.refreshDevices()
+            // 菜单面板与刘海弹窗可能重叠，打开菜单时先收起弹窗。
+            NotchPopupController.shared.hide()
+        }
     }
 
     private var header: some View {
@@ -55,20 +70,62 @@ struct MenuBarContentView: View {
             BatteryStatusView(battery: session.battery)
 
             SectionCard(title: "噪声控制", symbol: "waveform") {
-                Picker("噪声控制", selection: Binding(
-                    get: { session.noiseControl },
-                    set: { session.setNoiseControl($0) }
-                )) {
-                    Text("关闭").tag(NoiseControlMode.off)
-                    Text("降噪").tag(NoiseControlMode.noiseCancellation)
-                    Text("通透").tag(NoiseControlMode.transparency)
-                    if session.capabilities.hasAdaptiveANC {
-                        Text("自适应").tag(NoiseControlMode.adaptive)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
+                noiseControlContent
             }
+        }
+    }
+
+    private var orderedNoiseGroups: [NoiseModeGroup] {
+        let order: [NoiseMainMode] = [.off, .noiseCancellation, .transparency, .adaptive]
+        return order.compactMap { main in
+            session.capabilities.noiseGroups.first { $0.main == main }
+        }
+    }
+
+    @ViewBuilder
+    private var noiseControlContent: some View {
+        let groups = orderedNoiseGroups
+        let currentGroup = groups.first { $0.main == session.noiseSelection.main }
+
+        Picker("噪声控制", selection: Binding(
+            get: { session.noiseSelection.main },
+            set: { main in
+                let group = groups.first { $0.main == main }
+                let level = group.flatMap { g in
+                    g.levels.isEmpty ? nil : g.defaultLevelIndex
+                }
+                session.setNoiseSelection(NoiseSelection(main: main, levelIndex: level))
+            }
+        )) {
+            ForEach(groups, id: \.main) { group in
+                Text(NoiseNaming.mainName(group.main)).tag(group.main)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+
+        if let group = currentGroup, !group.levels.isEmpty {
+            Picker("档位", selection: Binding(
+                get: { session.noiseSelection.levelIndex ?? group.defaultLevelIndex },
+                set: { session.setNoiseLevel($0) }
+            )) {
+                ForEach(group.levels) { level in
+                    Text(NoiseNaming.levelName(modeType: level.modeType)).tag(level.id)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+        }
+
+        if session.noiseSelection.main == .transparency,
+           let group = currentGroup,
+           group.hasVocalEnhancement {
+            Toggle("强化人声", isOn: Binding(
+                get: { session.isVocalEnhancementOn },
+                set: { session.setVocalEnhancement($0) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
         }
     }
 
@@ -151,5 +208,58 @@ struct MenuBarContentView: View {
         case .failed: return .red
         default: return .secondary
         }
+    }
+}
+
+private struct ContentHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// 把 SwiftUI 内容高度同步给 MenuBarExtra 窗口。
+/// 系统窗口在内容变矮时不会自动收缩（高度滞留），导致窗口材质与内容错位，
+/// 出现空白、直角和边框线；这里显式调用 setContentSize 强制跟随。
+private struct WindowSizeSync: NSViewRepresentable {
+    let width: CGFloat
+    let height: CGFloat
+
+    final class SyncView: NSView {
+        var targetWidth: CGFloat = 0
+        var targetHeight: CGFloat = 0
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            apply()
+        }
+
+        override func layout() {
+            super.layout()
+            apply()
+        }
+
+        func apply() {
+            guard let window, targetWidth > 1, targetHeight > 1 else { return }
+            let target = NSSize(width: targetWidth, height: targetHeight)
+            guard abs(window.frame.width - target.width) > 1
+                || abs(window.frame.height - target.height) > 1 else { return }
+            window.setContentSize(target)
+            window.invalidateShadow()
+        }
+    }
+
+    func makeNSView(context: Context) -> SyncView {
+        let view = SyncView()
+        view.targetWidth = width
+        view.targetHeight = height
+        DispatchQueue.main.async { view.apply() }
+        return view
+    }
+
+    func updateNSView(_ nsView: SyncView, context: Context) {
+        nsView.targetWidth = width
+        nsView.targetHeight = height
+        nsView.apply()
     }
 }

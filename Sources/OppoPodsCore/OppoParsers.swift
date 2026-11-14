@@ -79,6 +79,118 @@ public enum OppoParsers {
         return noiseControl(from: frame)
     }
 
+    /// 从 0x810C / 0x0204 帧里提取当前噪声 protocolIndex 位图（bit n = protocolIndex n）。
+    public static func noiseIndexBitmap(from frame: OppoFrame) -> Int? {
+        guard frame.command == OppoCommand.ancResponse || frame.command == OppoCommand.activeReport else { return nil }
+        let bytes = Array(frame.payload)
+        if frame.command == OppoCommand.activeReport,
+           let first = bytes.first, first != 0x03, first != 0x04 { return nil }
+        guard let index = bytes.indices.dropLast(2).first(where: {
+            bytes[$0] == 0x01 && bytes[$0 + 1] == 0x01
+        }) else { return nil }
+        let low = Int(bytes[index + 2])
+        let high = index + 3 < bytes.count ? Int(bytes[index + 3]) : 0
+        return low | (high << 8)
+    }
+
+    /// 按型号映射表把位图解析为两级噪声选择（主模式 + 子档位）。
+    public static func noiseSelection(
+        from frame: OppoFrame,
+        indexToSelection: [Int: NoiseSelection]
+    ) -> NoiseSelection? {
+        guard let bitmap = noiseIndexBitmap(from: frame) else { return nil }
+        var fallback: NoiseSelection?
+        for bit in 0..<16 where bitmap & (1 << bit) != 0 {
+            if let selection = indexToSelection[bit] {
+                if selection.levelIndex != nil { return selection }
+                fallback = fallback ?? selection
+            }
+        }
+        return fallback ?? noiseControl(from: frame).map { NoiseSelection(main: $0.mainMode) }
+    }
+
+    /// 解析双联设备列表。
+    ///
+    /// 0x8112 响应格式（与官方 PollCommandManager 的轮询响应约定一致）：
+    /// `[status(1), count(1), elements…]`，首字节为状态码，数据从 offset 1 开始。
+    /// 0x0204 type=0x06 事件格式：`[0x06, count(1), elements…]`。
+    ///
+    /// 元素格式（CommandUtil.parseMultiConnectStateInfo）：
+    /// `mac(6, 包内逆序) + recordLen(1) + state(1) + flag(1) + nameLen(1) + name + pad`，
+    /// 单条总长 `7 + recordLen`。flag：bit0=当前设备 bit1=主音频 bit2=音频活跃 bits3-5=deviceType。
+    public static func multiConnectDevices(from frame: OppoFrame) -> [MultiConnectDevice]? {
+        let bytes = Array(frame.payload)
+        switch frame.command {
+        case OppoCommand.multiConnectResponse:
+            // 官方实现从 offset 1 解析（跳过 status）；若固件省略 status 则回退 offset 0。
+            return bestMultiConnectParse(bytes, offsets: [1, 0])
+        case OppoCommand.activeReport:
+            guard bytes.first == 0x06 else { return nil }
+            return bestMultiConnectParse(bytes, offsets: [1])
+        default:
+            return nil
+        }
+    }
+
+    /// 在多个候选偏移中挑最可信的解析结果：完整消费 payload 且设备数多者优先。
+    private static func bestMultiConnectParse(
+        _ bytes: [UInt8],
+        offsets: [Int]
+    ) -> [MultiConnectDevice]? {
+        var best: (devices: [MultiConnectDevice], score: Int)?
+        for start in offsets {
+            guard let parsed = parseMultiConnectDevices(bytes, start: start) else { continue }
+            let score = (parsed.exact ? 1_000 : 0)
+                + parsed.devices.count * 10
+                + min(parsed.consumed, 9)
+            if best == nil || score > best!.score {
+                best = (parsed.devices, score)
+            }
+        }
+        return best?.devices
+    }
+
+    static func parseMultiConnectDevices(
+        _ bytes: [UInt8],
+        start: Int
+    ) -> (devices: [MultiConnectDevice], consumed: Int, exact: Bool)? {
+        guard start < bytes.count else { return nil }
+        let count = Int(bytes[start])
+        guard count <= 16 else { return nil }
+        guard count > 0 else {
+            let consumed = start + 1
+            return ([], consumed, consumed == bytes.count)
+        }
+        var position = start + 1
+        var devices: [MultiConnectDevice] = []
+        for _ in 0..<count {
+            guard position + 8 <= bytes.count else { return nil }
+            let macBytes = bytes[position..<(position + 6)]
+            let address = macBytes.reversed().map { String(format: "%02X", $0) }.joined(separator: ":")
+            let recordLength = Int(bytes[position + 6])
+            let state = Int(bytes[position + 7])
+            guard recordLength >= 3, position + 7 + recordLength <= bytes.count else { return nil }
+            let flag = Int(bytes[position + 8])
+            let nameLength = Int(bytes[position + 9])
+            let nameStart = position + 10
+            guard nameLength <= recordLength - 3, nameStart + nameLength <= bytes.count else { return nil }
+            let name = String(decoding: bytes[nameStart..<(nameStart + nameLength)], as: UTF8.self)
+            if address != "00:00:00:00:00:00" {
+                devices.append(MultiConnectDevice(
+                    address: address,
+                    name: name,
+                    connectionState: .init(wireValue: state),
+                    isCurrentDevice: flag & 0x01 != 0,
+                    isMainAudioDevice: flag & 0x02 != 0,
+                    isAudioActive: flag & 0x04 != 0,
+                    deviceType: ((flag >> 5) & 1) * 4 + ((flag >> 4) & 1) * 2 + ((flag >> 3) & 1)
+                ))
+            }
+            position += 7 + recordLength
+        }
+        return (devices, position, position == bytes.count)
+    }
+
     public static func featureStatus(from frame: OppoFrame) -> FeatureStatus? {
         guard frame.command == OppoCommand.statusResponse else { return nil }
         let bytes = Array(frame.payload)

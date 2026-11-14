@@ -179,21 +179,45 @@ struct SettingsView: View {
                     }
                 }
 
-                if session.capabilities.hasWearDetection || session.capabilities.hasDualDevice {
+                if session.capabilities.hasWearDetection {
                     SettingsControlCard(title: "设备控制", symbol: "earbuds") {
-                        if session.capabilities.hasWearDetection {
-                            Toggle("佩戴检测", isOn: Binding(
-                                get: { session.wearDetection },
-                                set: { session.setWearDetection($0) }
-                            ))
-                        }
-                        if session.capabilities.hasDualDevice {
-                            Toggle("双设备连接", isOn: Binding(
-                                get: { session.dualDevice },
-                                set: { session.setDualDevice($0) }
-                            ))
+                        Toggle("佩戴检测", isOn: Binding(
+                            get: { session.wearDetection },
+                            set: { session.setWearDetection($0) }
+                        ))
+                    }
+                }
+
+                if session.capabilities.hasDualDevice {
+                    SettingsControlCard(title: "双联设备", symbol: "link") {
+                        Toggle("双设备连接", isOn: Binding(
+                            get: { session.dualDevice },
+                            set: { session.setDualDevice($0) }
+                        ))
+
+                        Divider()
+
+                        if session.dualDevice {
+                            if session.multiConnectDevices.isEmpty {
+                                Text("暂未发现其他设备。耳机需与第二台设备完成双配对后才会出现在列表中。")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                ForEach(session.multiConnectDevices) { device in
+                                    multiConnectRow(device)
+                                }
+                            }
+                            Button("刷新设备列表") { session.queryMultiConnect() }
+                                .buttonStyle(.borderless)
+                                .font(.caption)
+                        } else {
+                            Text("开启双设备连接后，可在此查看已连接的其他设备。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
+                    .onAppear { session.queryMultiConnect() }
                 }
 
                 SettingsControlCard(title: "当前耳机", symbol: "info.circle") {
@@ -220,6 +244,34 @@ struct SettingsView: View {
 
     private func supportedText(_ supported: Bool) -> String {
         supported ? "支持" : "不支持或未声明"
+    }
+
+    private func multiConnectRow(_ device: MultiConnectDevice) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: device.isMainAudioDevice ? "speaker.wave.2.fill" : "iphone")
+                .foregroundStyle(device.isAudioActive ? Color.accentColor : .secondary)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(device.name.isEmpty ? device.address : device.name)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(multiConnectStateText(device))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+    }
+
+    private func multiConnectStateText(_ device: MultiConnectDevice) -> String {
+        switch device.connectionState {
+        case .connected:
+            if device.isCurrentDevice { return "已连接 · 当前设备" }
+            return "已连接"
+        case .connecting: return "连接中…"
+        case .disconnecting: return "断开中…"
+        case .idle: return "未连接"
+        }
     }
 }
 

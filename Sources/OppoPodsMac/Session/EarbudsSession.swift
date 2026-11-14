@@ -9,11 +9,13 @@ final class EarbudsSession: ObservableObject {
     @Published private(set) var productID: String?
     @Published private(set) var battery = BatteryStatus()
     @Published private(set) var noiseControl: NoiseControlMode = .off
+    @Published private(set) var noiseSelection = NoiseSelection(main: .off)
     @Published private(set) var spatialAudio: SpatialAudioMode = .off
     @Published private(set) var gameMode = false
     @Published private(set) var wearDetection = false
     @Published private(set) var dualDevice = false
     @Published private(set) var spatialSound = false
+    @Published private(set) var multiConnectDevices: [MultiConnectDevice] = []
     @Published private(set) var selectedEQ = 0
     @Published private(set) var deviceEQPresets: [DeviceEqualizerPreset] = []
     @Published private(set) var capabilities = DeviceCapabilities.generic
@@ -100,14 +102,64 @@ final class EarbudsSession: ObservableObject {
         send(commands.queryANC())
         send(commands.queryEQ())
         if capabilities.hasCustomEQ { send(commands.queryAllEQ()) }
+        send(commands.queryMultiConnect())
     }
 
     func setNoiseControl(_ mode: NoiseControlMode) {
-        noiseControl = mode
-        if let index = capabilities.indexByNoiseMode[mode] {
-            send(commands.setNoiseControl(protocolIndex: index))
+        setNoiseSelection(NoiseSelection(main: mode.mainMode))
+    }
+
+    /// 切换主模式（关闭/降噪/通透/自适应）；进入有子档位的模式时自动落到默认档位。
+    func setNoiseSelection(_ selection: NoiseSelection) {
+        var resolved = selection
+        if selection.levelIndex == nil,
+           let group = capabilities.noiseGroups.first(where: { $0.main == selection.main }),
+           !group.levels.isEmpty {
+            resolved.levelIndex = group.defaultLevelIndex
+        }
+        noiseSelection = resolved
+        noiseControl = legacyMode(for: resolved.main)
+        send(commands.setNoiseControl(protocolIndex: resolveIndex(for: resolved)))
+    }
+
+    /// 只换子档位（深度/中度/轻度/智能动态，或自适应范围三档）。
+    func setNoiseLevel(_ levelIndex: Int) {
+        setNoiseSelection(NoiseSelection(main: noiseSelection.main, levelIndex: levelIndex))
+    }
+
+    /// 通透模式下的强化人声开关。开启切到 modeType 6 的档位，关闭回到通透默认档。
+    func setVocalEnhancement(_ enabled: Bool) {
+        guard noiseSelection.main == .transparency,
+              let group = capabilities.noiseGroups.first(where: { $0.main == .transparency }),
+              let vocalIndex = group.vocalEnhancementIndex else { return }
+        if enabled {
+            setNoiseSelection(NoiseSelection(main: .transparency, levelIndex: vocalIndex))
         } else {
-            send(commands.setNoiseControl(mode))
+            let normal = group.levels.first?.id ?? group.groupIndex
+            setNoiseSelection(NoiseSelection(main: .transparency, levelIndex: normal))
+        }
+    }
+
+    var isVocalEnhancementOn: Bool {
+        guard noiseSelection.main == .transparency,
+              let group = capabilities.noiseGroups.first(where: { $0.main == .transparency }),
+              let vocalIndex = group.vocalEnhancementIndex else { return false }
+        return noiseSelection.levelIndex == vocalIndex
+    }
+
+    private func resolveIndex(for selection: NoiseSelection) -> Int {
+        if let level = selection.levelIndex { return level }
+        return capabilities.noiseGroups.first(where: { $0.main == selection.main })?.groupIndex
+            ?? capabilities.indexByNoiseMode[legacyMode(for: selection.main)]
+            ?? selection.main.rawValue
+    }
+
+    private func legacyMode(for main: NoiseMainMode) -> NoiseControlMode {
+        switch main {
+        case .off: return .off
+        case .transparency: return .transparency
+        case .noiseCancellation: return .noiseCancellation
+        case .adaptive: return .adaptive
         }
     }
 
@@ -129,6 +181,17 @@ final class EarbudsSession: ObservableObject {
     func setDualDevice(_ enabled: Bool) {
         dualDevice = enabled
         send(commands.setFeature(0x11, enabled: enabled))
+        if enabled {
+            // 开关打开后设备列表才会开始填充，稍候拉一次。
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                self?.queryMultiConnect()
+            }
+        }
+    }
+
+    func queryMultiConnect() {
+        guard connectionState == .connected else { return }
+        send(commands.queryMultiConnect())
     }
 
     func setSpatialSound(_ enabled: Bool) {
@@ -214,12 +277,26 @@ final class EarbudsSession: ObservableObject {
                     capabilities = matched
                     deviceName = matched.modelName
                     if matched.hasCustomEQ { send(commands.queryAllEQ()) }
+                    // 型号能力就绪后再拉双联设备列表（初始化阶段太早会被跳过）。
+                    if matched.hasDualDevice { send(commands.queryMultiConnect()) }
                 }
             }
-            if let mode = OppoParsers.noiseControl(
+            if let selection = OppoParsers.noiseSelection(
+                from: frame,
+                indexToSelection: capabilities.selectionByIndex
+            ) {
+                noiseSelection = selection
+                noiseControl = legacyMode(for: selection.main)
+            } else if let mode = OppoParsers.noiseControl(
                 from: frame,
                 indexToMode: capabilities.noiseModeByIndex
-            ) { noiseControl = mode }
+            ) {
+                noiseControl = mode
+                noiseSelection = NoiseSelection(main: mode.mainMode)
+            }
+            if let devices = OppoParsers.multiConnectDevices(from: frame) {
+                multiConnectDevices = devices
+            }
             if let mode = OppoParsers.spatialAudio(from: frame) { spatialAudio = mode }
             if let status = OppoParsers.featureStatus(from: frame) {
                 if let mainMode = status.gameMode {
@@ -266,11 +343,13 @@ final class EarbudsSession: ObservableObject {
         productID = nil
         battery = BatteryStatus()
         noiseControl = .off
+        noiseSelection = NoiseSelection(main: .off)
         spatialAudio = .off
         gameMode = false
         wearDetection = false
         dualDevice = false
         spatialSound = false
+        multiConnectDevices = []
         selectedEQ = 0
         deviceEQPresets = []
         gameModeFeatureID = 0x06

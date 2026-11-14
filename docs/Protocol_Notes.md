@@ -364,3 +364,72 @@ adb logcat -s OppoPods-RfcommController OppoPods-AppRfcomm
 - 通知注册流程：`0x0200` → `0x8200` → `0x0205` → `0x8205` 是否在 Enco X3/Free4 上正常工作需实机确认。
 - `0x0204` eventCode `0x06` 的 payload 格式（MAC、连接状态、设备名）需抓包确认。
 - `AncModeParser` 现在只处理 eventCode `0x03`/`0x04`，跳过 `0x01`/`0x02`/`0x05`/`0x06` 等，需实机确认 ANC 通知不被误跳过。
+
+## 后续补充（双联命令与降噪子档位）
+
+以下结论由 2026-11 版 HeyMelody APK（`base.apk`）反编译补充，与本文前述分析方法一致。
+
+### 双联（多点连接）命令
+
+| 十六进制 | 语义 | 证据 |
+|---|---|---|
+| `0x0112` | `getMultiConnectInformation` 查询双联设备列表 | `HeadsetCoreService.d0`，日志 `"getMultiConnectInformation.."` |
+| `0x8112` | 列表响应 | `[status(1), count(1), elements…]`，数据从 offset 1 开始（与官方 PollCommandManager 响应约定一致） |
+| `0x0204` type `0x06` | 双联状态主动事件 | `NotificationCommandManager` case 6 → `CommandUtil.h` |
+| `0x0429` | `operateMultiConnectHandheldDevice` 操作手持设备 | `HeadsetCoreService.s0`，日志 `"operateMultiConnectHandheldDevice"` |
+
+`0x429` payload：
+
+- 操作类型 `1`（连接）/ `2`（断开）/ `3`：`[op, mac(6字节, 正序)]`，共 7 字节。
+- 操作类型 `4`（设置优先级）：`raise` 时 `[0x04, 0x00]`；否则 `[0x04, 0x01, mac(6)]`。
+- 官方 UI 调用点：`MultiDevicesManagerItem.handleDevicePreferenceClick` 连接用 `op=1`，断开确认对话框用 `op=2`；`MULTI_CONNECT_SET_PRIORITY` 用 `op=4`。
+
+设备列表元素格式（`CommandUtil.parseMultiConnectStateInfo`）：
+
+```text
+0x8112 响应：status(1) + count(1) + elements…
+0x0204 type=0x06 事件：type(1) + count(1) + elements…
+每条：mac(6, 包内逆序) + recordLen(1) + state(1) + flag(1) + nameLen(1) + name + pad
+      单条总长 7 + recordLen
+state: 1=连接中 2=已连接 4=断开中
+flag:  bit0=当前设备 bit1=主音频 bit2=音频活跃 bits3-5=deviceType(3bit)
+```
+
+注意：官方轮询响应（如 getRemoteMTU / getRemotePID / 0x8112）统一为
+`[status(1), data…]`，`CommandUtil.l(bArr)` 读首字节作为错误码，数据从 offset 1 解析。
+
+注意 MAC 字节序差异：列表报文里 MAC 逆序存储（解析时反转即得 `AA:BB:CC:DD:EE:FF`），
+而 `0x429` 的 MAC 是把显示字符串去掉冒号后按正序十六进制编码（`Wa.a.B`）。
+
+### 降噪子档位（childrenMode）语义
+
+白名单 `function.noiseReductionMode` 为两级结构，顶层 `modeType` 是主模式，
+`childrenMode` 是可选子档位，下发时用子档位的 `protocolIndex` 构造 `0x0404` 位图。
+命名映射来自 `NoiseReductionContentUtils`（`Zb/k.java`）与 `VoiceEnhancementSwitchItem`（`Zb/p.java`）：
+
+| modeType | 含义 |
+|---:|---|
+| 1 | 关闭 |
+| 2 | 通透（children[0]=普通通透） |
+| 3 | 轻度降噪 |
+| 4 | 深度降噪 |
+| 5 | 降噪（顶层组） |
+| 6 | 强化人声（通透的 children[1]，开关型） |
+| 7 | 智能动态降噪 |
+| 8 | 中度降噪 |
+| 10 | 自适应降噪范围（顶层组） |
+| 11 | 更少噪音（自适应偏降噪） |
+| 12 | 标准 |
+| 13 | 更多噪音（自适应偏通透） |
+
+典型机型（OPPO Enco X4，product id `06EC10`）：
+
+```text
+modeType 5  (降噪)  children: 7(智能,proto 7) 4(深度,proto 4) 8(中度,proto 5) 3(轻度,proto 6)
+modeType 10 (自适应) children: 11(proto 12) 12(proto 13) 13(proto 14)
+modeType 1  (关闭)  children: 1(proto 3)
+modeType 2  (通透)  children: 2(proto 8)          ← X4 无强化人声档
+```
+
+OPPO Enco X3（`067410`）的通透组为 `children: 2(proto 8), 6(proto 9)`，
+即 `children[1].modeType == 6` 为强化人声，切换开关就是在两个 `protocolIndex` 间切换。

@@ -1,13 +1,40 @@
-# OPPO Pods for macOS
+# OPPO Pods Connect
 
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-111111.svg)](#系统要求)
 [![Swift](https://img.shields.io/badge/Swift-5.10-F05138.svg)](Package.swift)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
+[![Based on](https://img.shields.io/badge/based%20on-ssigpoy%2FOPPO--Pods--for--macOS-lightgrey.svg)](https://github.com/ssigpoy/OPPO-Pods-for-macOS)
 
-面向 macOS 的非官方 OPPO、OnePlus、realme 耳机控制工具。它使用 SwiftUI 和 IOBluetooth，通过逆向整理的 OPPO / HeyMelody RFCOMM 协议读取电量、切换降噪并控制耳机功能。
+面向 macOS 的非官方 OPPO / OnePlus / realme 耳机控制工具（菜单栏应用）。
+
+本项目基于 [ssigpoy/OPPO-Pods-for-macOS](https://github.com/ssigpoy/OPPO-Pods-for-macOS) 持续完善：在原有电量、降噪、EQ 等能力之上，**新增降噪深度档位、通透强化人声、双联设备列表与刘海连接弹窗**，并把设备库扩充至 141 款（含 OPPO Enco X4）。协议实现以逆向 HeyMelody 官方 App 为依据，整理在 [docs/Protocol_Notes.md](docs/Protocol_Notes.md)。
 
 > [!WARNING]
 > 本项目与 OPPO、OnePlus、realme、HeyTap 或 Apple 无关，也不是官方 HeyMelody 客户端。协议可能随耳机固件更新而变化，请先阅读[设备适配说明](docs/Supported_Devices.md)。
+
+## 相比原项目的增强
+
+| 方向 | 内容 |
+|---|---|
+| 设备适配 | 型号库 137 → 141：新增 **OPPO Enco X4**、OnePlus Buds Pro 4、Enco Buds3s、OnePlus Buds Clip；76 条升级为新版 HeyMelody 白名单元数据 |
+| 降噪深度 | 主模式之外支持子档位：**智能动态 / 深度 / 中度 / 轻度**（Enco X3/X4 等机型） |
+| 自适应范围 | 自适应模式三档：**更少噪音 / 标准 / 更多噪音** |
+| 通透人声 | 通透模式下**强化人声**开关（按型号元数据自动显隐） |
+| 双联设备 | 设置 → 耳机控制 → **双联设备**：显示耳机多点连接的设备列表与状态（`0x0112` 查询 + `0x0204` 事件） |
+| 连接弹窗 | 耳机连上后在**刘海下方**弹出胶囊卡片：型号 + 左/右耳/充电盒电量，自动消失 |
+| 协议修复 | 修正 `0x8112` 双联响应解析（`[status, count, …]` 格式）、查询时机等；测试 9 → 19 |
+| UI 稳定性 | 修复菜单窗口高度滞留导致的边框/直角异常等显示问题 |
+
+## 功能
+
+- 枚举 macOS 已配对设备并保存首选耳机；系统蓝牙连接后自动建立厂商控制通道
+- 左耳、右耳和充电盒电量及充电状态
+- 降噪、关闭、通透、自适应降噪，含**深度档位**与**强化人声**子选项
+- 游戏低延迟开关；空间音效开关或三档空间音频模式
+- 内置 EQ 预设，设备端自定义 EQ 的读取、选择与多频段编辑
+- 佩戴检测、双设备连接（双联设备列表）
+- 连接成功时的刘海胶囊弹窗
+- 根据 product ID 和型号元数据动态隐藏不适用功能
 
 ## 界面预览
 
@@ -15,190 +42,46 @@
 |:---:|:---:|
 | ![菜单栏中的耳机电量](docs/images/menu-bar-status.png) | ![电量与噪声控制主页面](docs/images/noise-control.png) |
 
-![采用双列卡片布局的耳机功能设置页面](docs/images/earbud-controls.png)
-
-界面会根据耳机返回的 product ID 和型号能力自动隐藏不支持的控制项；截图为 OPPO Enco Free4（丹拿版）的实机效果。
-
-## 当前状态
-
-项目目前为开发预览版，采用 macOS 菜单栏应用形式：
-
-- 主页面集中显示电量与噪声控制，不使用滚动条。
-- “设置…”打开独立窗口，其他功能按类别以双列卡片显示。
-- 不注入系统控制中心、`bluetoothd` 或系统设置。
-- macOS 没有公开的第三方 AirPods 控制面板扩展接口，因此本项目不会伪装成 AirPods。
-
-## 功能
-
-- 枚举 macOS 已配对设备并保存首选耳机
-- 只在耳机已连接系统蓝牙时建立厂商控制通道
-- 实时监听系统蓝牙连接事件，并在启动阶段分批恢复已连接设备
-- HeyMelody SDP UUID 查询与 RFCOMM channel 15 回退
-- 控制通道 10 秒超时、初始化重试和定时状态刷新
-- 左耳、右耳和充电盒电量及充电状态
-- 降噪、关闭、通透、自适应降噪
-- 游戏低延迟开关
-- 空间音效开关，或型号明确支持时显示空间音频三档模式
-- 内置 EQ 预设，以及设备端自定义 EQ 的读取、选择、六段或型号指定频段编辑
-- 佩戴检测、双设备连接
-- 根据 product ID 和型号元数据动态隐藏不适用功能
-
-> [!NOTE]
-> 自定义 EQ 使用原项目整理的 `0x0122`/`0x0418` 协议读取和写入耳机。OPPO Enco Free4（丹拿版）未在型号表声明频点时使用 62、250、1000、4000、8000、16000 Hz 六段默认值；其他型号若声明了频点则按型号数据显示。该功能仍需更多固件版本实机验证，首次使用前建议在官方 HeyMelody 软件中记录原曲线。
-
-## 系统要求
-
-- macOS 14 Sonoma 或更高版本
-- 支持 Bluetooth Classic RFCOMM 的 Mac
-- OPPO / OnePlus / realme 耳机已在“系统设置 → 蓝牙”完成普通音频配对
-- 从源码构建需要 Xcode 15.3+ 和 Swift 5.10+
+> 截图为原项目实机效果（OPPO Enco Free4 丹拿版）；新增的降噪档位、双联设备与刘海弹窗界面欢迎补充截图 / PR。
 
 ## 安装
 
 1. 先在“系统设置 → 蓝牙”中配对并连接耳机。
-2. 将 `OPPOPods.app` 拖入 `/Applications`（“应用程序”）文件夹。
-3. 从“应用程序”、Spotlight 或 Launchpad 打开。
-4. 在菜单栏 OPPOPods 中选择首选耳机。
+2. 从 [Releases](../../releases) 下载 DMG（或自行构建），把 `OPPOPods.app` 拖入「应用程序」。
+3. 打开 App，在菜单栏 OPPOPods 中选择首选耳机并「连接控制」。
 
-直接双击构建目录里的 `.app` 也能运行，但相当于便携运行。更新时用新版 App 替换旧版即可；Bundle ID 保持不变，因此偏好设置通常会保留。
-
-当前构建脚本只生成 ad-hoc 签名版本，没有 Apple 公证。从 GitHub 下载后首次打开时，可能需要在 Finder 中右键 App 并选择“打开”。
-
-## 发布版本
-
-推送符合 `v*` 的语义化版本标签后，GitHub Actions 会自动测试、构建 DMG、创建或更新对应的 GitHub Release，并上传 DMG 安装镜像及其 `SHA256SUMS.txt` 校验文件：
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-DMG 内包含 `OPPOPods.app` 和“应用程序”文件夹快捷方式。当前自动发布仍使用 ad-hoc 签名；配置 Developer ID 证书和 Apple 公证凭据后，才适合面向普通用户无提示分发。
+构建产物为 ad-hoc 签名、无 Apple 公证：首次打开若被拦截，请在 Finder 中右键 App 选择“打开”。
 
 ## 从源码构建
 
+需要 Xcode 15.3+ 与 Swift 5.10+：
+
 ```bash
-git clone <your-repository-url>
-cd oppopods
+git clone <this-repository-url>
+cd OPPO-Pods-Connect
 swift test
-./Scripts/build-app.sh
-open dist/OPPOPods.app
+./Scripts/build-app.sh        # 产出 dist/OPPOPods.app
+./Scripts/build-dmg.sh        # 产出 DMG 安装镜像
 ```
 
-也可以使用 Xcode 直接打开 `Package.swift`，运行 `OppoPodsMac` scheme。
+> [!TIP]
+> 若 `swift build` 报 `SwiftUIMacros ... plugin not found`，说明命令行工具指向了 CLT 而非完整 Xcode。
+> 临时指定：`export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`，或 `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`。
 
-构建脚本会：
+## 协议与逆向说明
 
-1. 执行 Swift Release 构建。
-2. 生成标准 `dist/OPPOPods.app` 目录结构。
-3. 复制 `Info.plist`、应用图标、型号库和 EQ 名称表。
-4. 使用蓝牙 entitlements 执行本地 ad-hoc 签名。
+控制通道走 HeyMelody RFCOMM（SDP UUID `00001107-D102-…` / `0000079A-D102-…`），数据帧为
+`AA + 长度 + 00 00 + cmd(2B LE) + seq + len(2B LE) + payload`，响应 `cmd | 0x8000`。
 
-运行 `./Scripts/build-dmg.sh development` 可以在 `dist/` 中生成本地 DMG。
+- [docs/Protocol_Notes.md](docs/Protocol_Notes.md)：帧格式、命令表、双联命令（`0x0112`/`0x429`）、降噪子档位语义、白名单 AES-GCM 解密配方
+- [docs/Protocol_Research.md](docs/Protocol_Research.md)：通知机制与抓包线索
+- [docs/Supported_Devices.md](docs/Supported_Devices.md)：141 款型号库与能力分级
 
-公开分发前应改用 Developer ID Application 签名，并完成 Apple 公证和 DMG 打包。
+## 致谢
 
-## 设备适配
+- [ssigpoy/OPPO-Pods-for-macOS](https://github.com/ssigpoy/OPPO-Pods-for-macOS) —— 本项目的原作，提供了完整的 macOS 客户端架构与协议逆向基础。本仓库在其之上继续完善，欢迎把有价值的修复以 PR 形式回馈上游。
+- 协议逆向来自对 OPPO / HeyMelody 官方 App 的公开可得产物分析，仅用于互操作性研究。
 
-`Resources/device_models.json` 目前包含 137 条 HeyMelody 型号记录：
+## License
 
-| 分类 | 数量 |
-|---|---:|
-| 可尝试 SPP 的耳机 / 颈挂耳机 | 128 |
-| OPPO 候选 | 51 |
-| OnePlus 候选 | 31 |
-| realme / DIZO 候选 | 46 |
-| 明确标记 `supportSpp=false` | 6 |
-| 型号库中的非耳机音箱 | 3 |
-
-“协议候选”不等于所有功能已经实机验证。当前收到明确 macOS 实机反馈的型号是 OPPO Enco Free4（丹拿版，product ID `06C010`）。完整列表与能力字段见[设备适配列表](docs/Supported_Devices.md)。
-
-## 工作原理
-
-普通声音使用 macOS 已建立的 A2DP / HFP 链路；OPPOPods 另外打开厂商 RFCOMM 控制通道。软件不会主动替代系统连接耳机：如果设备尚未连接系统蓝牙，“连接控制”按钮会保持禁用。
-
-当前优先查询两个 HeyMelody SPP UUID：
-
-```text
-00001107-D102-11E1-9B23-00025B00A5A5
-0000079A-D102-11E1-9B23-00025B00A5A5
-```
-
-外层帧格式：
-
-```text
-AA [TotalLen] 00 00 [Cmd 2B LE] [Seq] [PayloadLen 2B LE] [Payload...]
-```
-
-实现包含握手、product ID、通知订阅、电量、ANC、批量状态、空间音效、EQ 和 feature 开关。研究记录见：
-
-- [协议实现笔记](docs/Protocol_Notes.md)
-- [官方客户端互操作性研究](docs/Protocol_Research.md)
-- [实现计划](docs/Implementation_Plan.md)
-
-这些文档是社区互操作性研究，不是 OPPO / HeyTap 官方协议规范。
-
-## 项目结构
-
-```text
-.
-├── AppBundle/                  Info.plist、entitlements 和应用图标
-├── Resources/                  型号能力与 EQ 名称数据
-├── Scripts/build-app.sh        独立 App Bundle 构建脚本
-├── Sources/
-│   ├── OppoPodsCore/           协议命令、封包、分帧与解析
-│   └── OppoPodsMac/            SwiftUI、IOBluetooth 与会话状态
-├── Tests/OppoPodsCoreTests/    协议单元测试
-├── docs/                       适配表、协议研究与实现计划
-├── Package.swift
-├── THIRD_PARTY_NOTICES.md
-└── LICENSE
-```
-
-项目没有外部 Swift Package 依赖，只使用 Swift 标准库和 macOS 系统框架 SwiftUI、AppKit、Foundation 与 IOBluetooth。
-
-## 故障排查
-
-### 设备显示“系统未连接”
-
-先在 macOS“系统设置 → 蓝牙”中连接耳机。OPPOPods 监听系统蓝牙连接事件，正常情况下按钮会近实时恢复；控制服务稍晚就绪时会在连接后的数秒内分阶段重试。
-
-### 耳机已连接，但控制页面没有出现
-
-- 在“设置 → 通用”确认首选耳机正确。
-- 保持“耳机已连接时自动建立控制通道”开启。
-- 点击“刷新设备列表”。
-- 同型号有多个历史配对时，从系统蓝牙中移除旧记录。
-
-### 只有声音，没有控制能力
-
-A2DP / HFP 音频连接和 HeyMelody RFCOMM 控制通道相互独立。某些型号、地区版本或固件即使音频正常，也可能没有开放相同的 SPP 服务。
-
-### 功能显示不完整
-
-功能显隐来自耳机返回的 product ID 和 `Resources/device_models.json`。请提交设备适配 Issue，并提供型号、product ID、固件版本、macOS 版本和逐项结果；不要上传蓝牙 MAC 地址或未脱敏日志。
-
-## 开源来源
-
-该 macOS 仓库从 [Leaf-lsgtky/OppoPods](https://github.com/Leaf-lsgtky/OppoPods) 中拆分，项目历史可追溯至 GPL-3.0 的 [Art-Chen/HyperPods](https://github.com/Art-Chen/HyperPods)。协议实现还参考了 HeyMelody 通信观察和其他社区互操作性研究。
-
-详细来源、使用方式和许可证边界见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。本仓库不包含官方 HeyMelody APK、耳机固件、签名密钥或用户私有抓包。
-
-## 贡献
-
-欢迎提交协议解析、型号测试、UI 修复和文档改进。设备报告应包含：
-
-- 耳机完整型号、product ID 和固件版本
-- Mac 型号 / 芯片及 macOS 版本
-- 电量、ANC、空间音效、游戏模式、EQ、佩戴检测、双设备逐项结果
-- 复现步骤与脱敏后的错误信息
-
-## 许可证
-
-本项目按 [GNU General Public License v3.0](LICENSE) 发布。分发源码、修改版或二进制时，请保留上游归属和第三方声明，并提供对应源码。
-
-OPPO、OnePlus、realme、HeyTap、HeyMelody、Apple 和 macOS 是各自权利人的商标；本文仅以其说明兼容对象。
-
-## English summary
-
-OPPO Pods for macOS is an unofficial GPL-3.0 menu-bar controller for selected OPPO, OnePlus, and realme earbuds. It uses SwiftUI, IOBluetooth, and a reverse-engineered HeyMelody RFCOMM protocol. Read the [device matrix](docs/Supported_Devices.md) and [third-party notices](THIRD_PARTY_NOTICES.md) before testing or redistributing it.
+[GPL-3.0](LICENSE)，与上游项目保持一致。

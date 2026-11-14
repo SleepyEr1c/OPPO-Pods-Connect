@@ -1,13 +1,35 @@
 import Foundation
 import OppoPodsCore
 
+/// 一个降噪主模式及其可选子档位（深度/中度/轻度/智能动态、自适应范围、通透强化人声）。
+struct NoiseModeGroup: Equatable {
+    let main: NoiseMainMode
+    /// 顶层条目的 protocolIndex；未选择子档位时使用。
+    let groupIndex: Int
+    /// 可选子档位（不含强化人声）。
+    let levels: [NoiseLevelOption]
+    /// 通透模式的强化人声档（childrenMode 中 modeType == 6）。
+    let vocalEnhancementIndex: Int?
+
+    var hasVocalEnhancement: Bool { vocalEnhancementIndex != nil }
+
+    /// 默认子档位：优先智能动态（7），否则取第一个。
+    var defaultLevelIndex: Int {
+        if let smart = levels.first(where: { $0.modeType == 7 }) { return smart.id }
+        return levels.first?.id ?? groupIndex
+    }
+}
+
 struct DeviceCapabilities: Equatable {
     let modelID: String
     let modelName: String
     let noiseModeByIndex: [Int: NoiseControlMode]
     let indexByNoiseMode: [NoiseControlMode: Int]
+    let noiseGroups: [NoiseModeGroup]
+    let selectionByIndex: [Int: NoiseSelection]
     let hasAdaptiveANC: Bool
     let hasNoiseLevels: Bool
+    let hasVocalEnhancement: Bool
     let hasGameMode: Bool
     let hasSpatialSound: Bool
     let hasSpatialAudioModes: Bool
@@ -23,8 +45,11 @@ struct DeviceCapabilities: Equatable {
         modelName: "未识别型号",
         noiseModeByIndex: [:],
         indexByNoiseMode: [:],
+        noiseGroups: [],
+        selectionByIndex: [:],
         hasAdaptiveANC: true,
         hasNoiseLevels: false,
+        hasVocalEnhancement: false,
         hasGameMode: true,
         hasSpatialSound: true,
         hasSpatialAudioModes: false,
@@ -103,16 +128,37 @@ final class DeviceModelRegistry {
         let functions = model.function
         var byIndex: [Int: NoiseControlMode] = [:]
         var byMode: [NoiseControlMode: Int] = [:]
+        var groups: [NoiseModeGroup] = []
+        var selectionByIndex: [Int: NoiseSelection] = [:]
         var hasNoiseLevels = false
 
         for entry in functions?.noiseReductionMode ?? [] {
-            guard let mode = Self.noiseMode(for: entry.modeType) else { continue }
-            byIndex[entry.protocolIndex] = mode
-            byMode[mode] = entry.protocolIndex
+            guard let main = Self.mainMode(for: entry.modeType) else { continue }
+            byIndex[entry.protocolIndex] = Self.legacyMode(for: main)
+            byMode[Self.legacyMode(for: main)] = entry.protocolIndex
+            selectionByIndex[entry.protocolIndex] = NoiseSelection(main: main)
+
+            var levels: [NoiseLevelOption] = []
+            var vocalIndex: Int?
             for child in entry.childrenMode ?? [] {
-                if [3, 4, 7, 8].contains(child.modeType) { hasNoiseLevels = true }
-                byIndex[child.protocolIndex] = Self.noiseMode(for: child.modeType) ?? mode
+                if child.modeType == 6, main == .transparency {
+                    vocalIndex = child.protocolIndex
+                    selectionByIndex[child.protocolIndex] = NoiseSelection(main: main, levelIndex: child.protocolIndex)
+                    continue
+                }
+                levels.append(NoiseLevelOption(id: child.protocolIndex, modeType: child.modeType))
+                byIndex[child.protocolIndex] = Self.legacyMode(for: main)
+                selectionByIndex[child.protocolIndex] = NoiseSelection(main: main, levelIndex: child.protocolIndex)
             }
+            if levels.contains(where: { [3, 4, 7, 8, 11, 12, 13].contains($0.modeType) }) {
+                hasNoiseLevels = true
+            }
+            groups.append(NoiseModeGroup(
+                main: main,
+                groupIndex: entry.protocolIndex,
+                levels: levels,
+                vocalEnhancementIndex: vocalIndex
+            ))
         }
 
         let spatialTypes = functions?.spatialTypes ?? []
@@ -135,8 +181,11 @@ final class DeviceModelRegistry {
             modelName: model.name ?? productID.uppercased(),
             noiseModeByIndex: byIndex,
             indexByNoiseMode: byMode,
-            hasAdaptiveANC: byMode[.adaptive] != nil,
+            noiseGroups: groups,
+            selectionByIndex: selectionByIndex,
+            hasAdaptiveANC: groups.contains { $0.main == .adaptive },
             hasNoiseLevels: hasNoiseLevels,
+            hasVocalEnhancement: groups.contains { $0.hasVocalEnhancement },
             hasGameMode: explicitGame ?? (listGame || gameSound || true),
             hasSpatialSound: !spatialTypes.isEmpty && !spatialTypes.contains(2),
             hasSpatialAudioModes: spatialTypes.contains(2),
@@ -149,13 +198,53 @@ final class DeviceModelRegistry {
         )
     }
 
-    private static func noiseMode(for type: Int) -> NoiseControlMode? {
+    /// 顶层 noiseReductionMode.modeType → 主模式。
+    /// 3/4/7/8 在部分老型号顶层出现时归入降噪；6 顶层出现时归入自适应（老语义）。
+    private static func mainMode(for type: Int) -> NoiseMainMode? {
         switch type {
         case 1: return .off
         case 2: return .transparency
         case 5, 3, 4, 7, 8: return .noiseCancellation
-        case 6, 10: return .adaptive
+        case 10, 6: return .adaptive
         default: return nil
+        }
+    }
+
+    private static func legacyMode(for main: NoiseMainMode) -> NoiseControlMode {
+        switch main {
+        case .off: return .off
+        case .transparency: return .transparency
+        case .noiseCancellation: return .noiseCancellation
+        case .adaptive: return .adaptive
+        }
+    }
+}
+
+/// 降噪子档位的中文显示名（modeType 语义来自 HeyMelody NoiseReductionContentUtils）。
+enum NoiseNaming {
+    static func levelName(modeType: Int) -> String {
+        switch modeType {
+        case 1: return "关闭"
+        case 2: return "通透"
+        case 3: return "轻度降噪"
+        case 4: return "深度降噪"
+        case 6: return "强化人声"
+        case 7: return "智能动态"
+        case 8: return "中度降噪"
+        case 10: return "自适应"
+        case 11: return "更少噪音"
+        case 12: return "标准"
+        case 13: return "更多噪音"
+        default: return "档位 \(modeType)"
+        }
+    }
+
+    static func mainName(_ main: NoiseMainMode) -> String {
+        switch main {
+        case .off: return "关闭"
+        case .transparency: return "通透"
+        case .noiseCancellation: return "降噪"
+        case .adaptive: return "自适应"
         }
     }
 }

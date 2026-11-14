@@ -18,6 +18,7 @@ struct SectionCard<Content: View>: View {
             content
         }
         .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
